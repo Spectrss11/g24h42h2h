@@ -92,7 +92,7 @@ do
     end
 
     function SaveManager:Save(name)
-        if not name then return false, 'no config file is selected' end
+        if not name then return false, 'no config file selected' end
 
         local path = self.Folder .. '/settings/' .. name .. '.json'
         local data = { objects = {} }
@@ -110,17 +110,17 @@ do
         end
 
         local success, encoded = pcall(httpService.JSONEncode, httpService, data)
-        if not success then return false, 'failed to encode data' end
+        if not success then return false, 'encode failed' end
 
         writefile(path, encoded)
         return true
     end
 
     function SaveManager:Load(name)
-        if not name then return false, 'no config file is selected' end
+        if not name then return false, 'no config selected' end
 
         local path = self.Folder .. '/settings/' .. name .. '.json'
-        if not isfile(path) then return false, 'invalid file' end
+        if not isfile(path) then return false, 'file not found' end
 
         local success, decoded = pcall(httpService.JSONDecode, httpService, readfile(path))
         if not success then return false, 'decode error' end
@@ -134,30 +134,32 @@ do
         return true
     end
 
-    function SaveManager:GetAccountName()
+    function SaveManager:GetProfileKey()
         local player = game:GetService("Players").LocalPlayer
-        return player and player.Name or "Unknown"
+        return player and player.UserId and tostring(player.UserId) or "UnknownProfile"
     end
 
-    function SaveManager:GetAccountAutoloadPath()
-        return self.Folder .. "/settings/load_acc.json"
+    function SaveManager:GetProfileAutoloadPath()
+        return self.Folder .. "/settings/load_profile.json"
     end
 
-    function SaveManager:ReadAccountAutoloads()
-        local path = self:GetAccountAutoloadPath()
-        if not isfile(path) then return { accounts = {} } end
+    function SaveManager:ReadProfileAutoloads()
+        local path = self:GetProfileAutoloadPath()
+        if not isfile(path) then
+            return { profiles = {} }
+        end
 
         local success, data = pcall(httpService.JSONDecode, httpService, readfile(path))
         if not success or type(data) ~= "table" then
-            return { accounts = {} }
+            return { profiles = {} }
         end
 
-        data.accounts = data.accounts or {}
+        data.profiles = data.profiles or {}
         return data
     end
 
-    function SaveManager:WriteAccountAutoloads(data)
-        writefile(self:GetAccountAutoloadPath(), httpService:JSONEncode(data))
+    function SaveManager:WriteProfileAutoloads(data)
+        writefile(self:GetProfileAutoloadPath(), httpService:JSONEncode(data))
     end
 
     function SaveManager:IgnoreThemeSettings()
@@ -192,7 +194,7 @@ do
         local out = {}
 
         for _, file in ipairs(files) do
-            if file:sub(-5) == '.json' and not file:find('load_acc.json', 1, true) then
+            if file:sub(-5) == '.json' and not file:find('load_profile.json', 1, true) then
                 local name = file:match("([^/\\]+)%.json$")
                 if name then
                     table.insert(out, name)
@@ -208,27 +210,25 @@ do
     end
 
     function SaveManager:LoadAutoloadConfig()
-        local account = self:GetAccountName()
+        local profile = self:GetProfileKey()
 
-        -- account autoload
-        local data = self:ReadAccountAutoloads()
-        local cfg = data.accounts[account]
+        -- profile autoload
+        local data = self:ReadProfileAutoloads()
+        local cfg = data.profiles[profile]
         if cfg then
             local ok, err = self:Load(cfg)
             if ok then
-                return self.Library:Notify(('Loaded account config "%s"'):format(cfg))
+                return self.Library:Notify(('Loaded profile config "%s"'):format(cfg))
             else
                 return self.Library:Notify('Failed: ' .. err)
             end
         end
-
-        -- all accounts autoload
         local path = self.Folder .. '/settings/autoload.txt'
         if isfile(path) then
             local name = readfile(path)
             local ok, err = self:Load(name)
             if ok then
-                self.Library:Notify(('Loaded all accounts config "%s"'):format(name))
+                self.Library:Notify(('Loaded global config "%s"'):format(name))
             else
                 self.Library:Notify('Failed: ' .. err)
             end
@@ -267,39 +267,38 @@ do
             self:Save(Options.SaveManager_ConfigList.Value)
         end)
 
-        section:AddButton('Clear all accounts autoload', function()
+        section:AddButton('Clear global autoload', function()
             local path = self.Folder .. '/settings/autoload.txt'
             if isfile(path) then delfile(path) end
-            SaveManager.AutoloadLabel:SetText('All accounts autoload: none')
+            SaveManager.AutoloadLabel:SetText('Global autoload: none')
         end)
 
-        section:AddButton('Clear account autoload', function()
-            local data = self:ReadAccountAutoloads()
-            data.accounts[self:GetAccountName()] = nil
-            self:WriteAccountAutoloads(data)
-            SaveManager.AccountAutoloadLabel:SetText(self:GetAccountName() .. ' autoload: none')
+        section:AddButton('Clear profile autoload', function()
+            local data = self:ReadProfileAutoloads()
+            data.profiles[self:GetProfileKey()] = nil
+            self:WriteProfileAutoloads(data)
+            SaveManager.ProfileAutoloadLabel:SetText('Profile autoload: none')
         end)
 
-        section:AddButton('Autoload for all accounts', function()
+        section:AddButton('Autoload for all profiles', function()
             local name = Options.SaveManager_ConfigList.Value
             writefile(self.Folder .. '/settings/autoload.txt', name)
-            SaveManager.AutoloadLabel:SetText('All accounts autoload: ' .. name)
+            SaveManager.AutoloadLabel:SetText('Global autoload: ' .. name)
         end)
 
-        section:AddButton('Autoload for this account', function()
+        section:AddButton('Autoload for this profile', function()
             local name = Options.SaveManager_ConfigList.Value
-            local data = self:ReadAccountAutoloads()
-            data.accounts[self:GetAccountName()] = name
-            self:WriteAccountAutoloads(data)
-            SaveManager.AccountAutoloadLabel:SetText(self:GetAccountName() .. ' autoload: ' .. name)
+            local data = self:ReadProfileAutoloads()
+            data.profiles[self:GetProfileKey()] = name
+            self:WriteProfileAutoloads(data)
+            SaveManager.ProfileAutoloadLabel:SetText('Profile autoload: ' .. name)
         end)
-
 
         SaveManager.AutoloadLabel =
-            section:AddLabel('All accounts autoload: none', true)
+            section:AddLabel('Global autoload: none', true)
 
-        SaveManager.AccountAutoloadLabel =
-            section:AddLabel(self:GetAccountName() .. ' autoload: none', true)
+        SaveManager.ProfileAutoloadLabel =
+            section:AddLabel('Profile autoload: none', true)
 
         self:SetIgnoreIndexes({
             'SaveManager_ConfigList',
