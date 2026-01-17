@@ -6,6 +6,7 @@ do
     SpectreStore.RootFolder = 'ProjectSpectre'
     SpectreStore.IgnoreKeys = {}
 
+
     SpectreStore.Parser = {
         Toggle = {
             Save = function(idx, object)
