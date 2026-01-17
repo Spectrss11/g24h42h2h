@@ -81,10 +81,6 @@ do
         }
     }
 
-    -- =========================
-    -- INTERNAL
-    -- =========================
-
     function SpectreConfig:BlacklistKeys(list)
         for _, k in next, list do
             self.Blacklist[k] = true
