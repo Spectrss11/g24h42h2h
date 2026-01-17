@@ -2,7 +2,9 @@ local HttpService = game:GetService('HttpService')
 
 local SpectreStore = {}
 
-do
+
+
+    do
     SpectreStore.RootFolder = 'ProjectSpectre'
     SpectreStore.IgnoreKeys = {}
 
