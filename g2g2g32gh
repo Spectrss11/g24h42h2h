@@ -1,15 +1,12 @@
-local HttpService = game:GetService('HttpService')
+local httpService = game:GetService('HttpService')
 
-local SpectreStore = {}
+local SaveManager = {}
 
+do
+    SaveManager.Folder = 'ProjectSpectre'
+    SaveManager.Ignore = {}
 
-
-    do
-    SpectreStore.RootFolder = 'ProjectSpectre'
-    SpectreStore.IgnoreKeys = {}
-
-
-    SpectreStore.Parser = {
+    SaveManager.Parser = {
         Toggle = {
             Save = function(idx, object)
                 return { type = 'Toggle', idx = idx, value = object.Value }
@@ -83,155 +80,233 @@ local SpectreStore = {}
         },
     }
 
-
-    function SpectreStore:Blacklist(list)
+    function SaveManager:SetIgnoreIndexes(list)
         for _, key in next, list do
-            self.IgnoreKeys[key] = true
+            self.Ignore[key] = true
         end
     end
 
-    function SpectreStore:SetRoot(folder)
-        self.RootFolder = folder
-        self:InitFolders()
+    function SaveManager:SetFolder(folder)
+        self.Folder = folder
+        self:BuildFolderTree()
     end
 
-    function SpectreStore:InitFolders()
-        for _, path in ipairs({
-            self.RootFolder,
-            self.RootFolder .. '/themes',
-            self.RootFolder .. '/settings'
-        }) do
+    function SaveManager:Save(name)
+        if not name then return false, 'no config file is selected' end
+
+        local path = self.Folder .. '/settings/' .. name .. '.json'
+        local data = { objects = {} }
+
+        for idx, toggle in next, Toggles do
+            if not self.Ignore[idx] then
+                table.insert(data.objects, self.Parser[toggle.Type].Save(idx, toggle))
+            end
+        end
+
+        for idx, option in next, Options do
+            if self.Parser[option.Type] and not self.Ignore[idx] then
+                table.insert(data.objects, self.Parser[option.Type].Save(idx, option))
+            end
+        end
+
+        local success, encoded = pcall(httpService.JSONEncode, httpService, data)
+        if not success then return false, 'failed to encode data' end
+
+        writefile(path, encoded)
+        return true
+    end
+
+    function SaveManager:Load(name)
+        if not name then return false, 'no config file is selected' end
+
+        local path = self.Folder .. '/settings/' .. name .. '.json'
+        if not isfile(path) then return false, 'invalid file' end
+
+        local success, decoded = pcall(httpService.JSONDecode, httpService, readfile(path))
+        if not success then return false, 'decode error' end
+
+        for _, option in next, decoded.objects do
+            if self.Parser[option.type] then
+                self.Parser[option.type].Load(option.idx, option)
+            end
+        end
+
+        return true
+    end
+
+    function SaveManager:GetAccountName()
+        local player = game:GetService("Players").LocalPlayer
+        return player and player.Name or "Unknown"
+    end
+
+    function SaveManager:GetAccountAutoloadPath()
+        return self.Folder .. "/settings/load_acc.json"
+    end
+
+    function SaveManager:ReadAccountAutoloads()
+        local path = self:GetAccountAutoloadPath()
+        if not isfile(path) then return { accounts = {} } end
+
+        local success, data = pcall(httpService.JSONDecode, httpService, readfile(path))
+        if not success or type(data) ~= "table" then
+            return { accounts = {} }
+        end
+
+        data.accounts = data.accounts or {}
+        return data
+    end
+
+    function SaveManager:WriteAccountAutoloads(data)
+        writefile(self:GetAccountAutoloadPath(), httpService:JSONEncode(data))
+    end
+
+    function SaveManager:IgnoreThemeSettings()
+        self:SetIgnoreIndexes({
+            "BackgroundColor",
+            "MainColor",
+            "AccentColor",
+            "OutlineColor",
+            "FontColor",
+            "ThemeManager_ThemeList",
+            "ThemeManager_CustomThemeList",
+            "ThemeManager_CustomThemeName",
+        })
+    end
+
+    function SaveManager:BuildFolderTree()
+        local paths = {
+            self.Folder,
+            self.Folder .. '/themes',
+            self.Folder .. '/settings'
+        }
+
+        for _, path in ipairs(paths) do
             if not isfolder(path) then
                 makefolder(path)
             end
         end
     end
 
-
-    function SpectreStore:Write(name)
-        if not name then return false, 'no config selected' end
-
-        local data = { objects = {} }
-        local path = self.RootFolder .. '/settings/' .. name .. '.json'
-
-        for idx, toggle in next, Toggles do
-            if not self.IgnoreKeys[idx] then
-                table.insert(data.objects, self.Parser[toggle.Type].Save(idx, toggle))
-            end
-        end
-
-        for idx, option in next, Options do
-            if self.Parser[option.Type] and not self.IgnoreKeys[idx] then
-                table.insert(data.objects, self.Parser[option.Type].Save(idx, option))
-            end
-        end
-
-        writefile(path, HttpService:JSONEncode(data))
-        return true
-    end
-
-    function SpectreStore:Apply(name)
-        if not name then return false end
-
-        local path = self.RootFolder .. '/settings/' .. name .. '.json'
-        if not isfile(path) then return false end
-
-        local decoded = HttpService:JSONDecode(readfile(path))
-        for _, obj in next, decoded.objects do
-            if self.Parser[obj.type] then
-                self.Parser[obj.type].Load(obj.idx, obj)
-            end
-        end
-
-        return true
-    end
-
-
-    function SpectreStore:GetAccount()
-        local plr = game:GetService("Players").LocalPlayer
-        return plr and plr.Name or "Unknown"
-    end
-
-    function SpectreStore:GetAccountFile()
-        return self.RootFolder .. "/settings/load_acc.json"
-    end
-
-    function SpectreStore:ReadAccounts()
-        local path = self:GetAccountFile()
-        if not isfile(path) then return { accounts = {} } end
-        return HttpService:JSONDecode(readfile(path))
-    end
-
-    function SpectreStore:WriteAccounts(data)
-        writefile(self:GetAccountFile(), HttpService:JSONEncode(data))
-    end
-
-    function SpectreStore:AutoApply()
-        local acc = self:GetAccount()
-        local data = self:ReadAccounts()
-
-        if data.accounts and data.accounts[acc] then
-            return self:Apply(data.accounts[acc])
-        end
-
-        local global = self.RootFolder .. '/settings/autoload.txt'
-        if isfile(global) then
-            self:Apply(readfile(global))
-        end
-    end
-    function SpectreStore:Scan()
+    function SaveManager:RefreshConfigList()
+        local files = listfiles(self.Folder .. '/settings')
         local out = {}
-        for _, file in ipairs(listfiles(self.RootFolder .. '/settings')) do
-            local name = file:match("([^/\\]+)%.json$")
-            if name then table.insert(out, name) end
+
+        for _, file in ipairs(files) do
+            if file:sub(-5) == '.json' and not file:find('load_acc.json', 1, true) then
+                local name = file:match("([^/\\]+)%.json$")
+                if name then
+                    table.insert(out, name)
+                end
+            end
         end
+
         return out
     end
 
-    function SpectreStore:BuildUI(tab)
+    function SaveManager:SetLibrary(library)
+        self.Library = library
+    end
+
+    function SaveManager:LoadAutoloadConfig()
+        local account = self:GetAccountName()
+
+        -- account autoload
+        local data = self:ReadAccountAutoloads()
+        local cfg = data.accounts[account]
+        if cfg then
+            local ok, err = self:Load(cfg)
+            if ok then
+                return self.Library:Notify(('Loaded account config "%s"'):format(cfg))
+            else
+                return self.Library:Notify('Failed: ' .. err)
+            end
+        end
+
+        -- all accounts autoload
+        local path = self.Folder .. '/settings/autoload.txt'
+        if isfile(path) then
+            local name = readfile(path)
+            local ok, err = self:Load(name)
+            if ok then
+                self.Library:Notify(('Loaded all accounts config "%s"'):format(name))
+            else
+                self.Library:Notify('Failed: ' .. err)
+            end
+        end
+    end
+
+    function SaveManager:BuildConfigSection(tab)
+        assert(self.Library, 'SaveManager.Library not set')
+
         local section = tab:AddRightGroupbox('Configuration')
 
-        section:AddDropdown('Spectre_ConfigList', {
+        section:AddDropdown('SaveManager_ConfigList', {
             Text = 'Config list',
-            Values = self:Scan(),
+            Values = self:RefreshConfigList(),
             AllowNull = true
         })
 
-        section:AddInput('Spectre_ConfigName', { Text = 'Config name' })
+        section:AddInput('SaveManager_ConfigName', { Text = 'Config name' })
         section:AddDivider()
 
         section:AddButton('Create config', function()
-            local name = Options.Spectre_ConfigName.Value
-            if name:gsub(' ', '') == '' then return end
-            self:Write(name)
+            local name = Options.SaveManager_ConfigName.Value
+            if name:gsub(' ', '') == '' then
+                return self.Library:Notify('Invalid config name', 2)
+            end
+            self:Save(name)
+            Options.SaveManager_ConfigList.Values = self:RefreshConfigList()
+            Options.SaveManager_ConfigList:SetValues()
         end)
 
         section:AddButton('Load config', function()
-            self:Apply(Options.Spectre_ConfigList.Value)
+            self:Load(Options.SaveManager_ConfigList.Value)
         end)
 
         section:AddButton('Overwrite config', function()
-            self:Write(Options.Spectre_ConfigList.Value)
+            self:Save(Options.SaveManager_ConfigList.Value)
         end)
 
         section:AddButton('Autoload for all accounts', function()
-            writefile(self.RootFolder .. '/settings/autoload.txt', Options.Spectre_ConfigList.Value)
+            local name = Options.SaveManager_ConfigList.Value
+            writefile(self.Folder .. '/settings/autoload.txt', name)
+            SaveManager.AutoloadLabel:SetText('All accounts autoload: ' .. name)
         end)
 
         section:AddButton('Autoload for this account', function()
-            local data = self:ReadAccounts()
-            data.accounts = data.accounts or {}
-            data.accounts[self:GetAccount()] = Options.Spectre_ConfigList.Value
-            self:WriteAccounts(data)
+            local name = Options.SaveManager_ConfigList.Value
+            local data = self:ReadAccountAutoloads()
+            data.accounts[self:GetAccountName()] = name
+            self:WriteAccountAutoloads(data)
+            SaveManager.AccountAutoloadLabel:SetText(self:GetAccountName() .. ' autoload: ' .. name)
         end)
 
-        self:Blacklist({
-            'Spectre_ConfigList',
-            'Spectre_ConfigName'
+        section:AddButton('Clear all accounts autoload', function()
+            local path = self.Folder .. '/settings/autoload.txt'
+            if isfile(path) then delfile(path) end
+            SaveManager.AutoloadLabel:SetText('All accounts autoload: none')
+        end)
+
+        section:AddButton('Clear account autoload', function()
+            local data = self:ReadAccountAutoloads()
+            data.accounts[self:GetAccountName()] = nil
+            self:WriteAccountAutoloads(data)
+            SaveManager.AccountAutoloadLabel:SetText(self:GetAccountName() .. ' autoload: none')
+        end)
+
+        SaveManager.AutoloadLabel =
+            section:AddLabel('All accounts autoload: none', true)
+
+        SaveManager.AccountAutoloadLabel =
+            section:AddLabel(self:GetAccountName() .. ' autoload: none', true)
+
+        self:SetIgnoreIndexes({
+            'SaveManager_ConfigList',
+            'SaveManager_ConfigName'
         })
     end
 
-    SpectreStore:InitFolders()
+    SaveManager:BuildFolderTree()
 end
 
-return SpectreStore
+return SaveManager
