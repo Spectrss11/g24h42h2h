@@ -267,6 +267,19 @@ do
             self:Save(Options.SaveManager_ConfigList.Value)
         end)
 
+        section:AddButton('Clear all accounts autoload', function()
+            local path = self.Folder .. '/settings/autoload.txt'
+            if isfile(path) then delfile(path) end
+            SaveManager.AutoloadLabel:SetText('All accounts autoload: none')
+        end)
+
+        section:AddButton('Clear account autoload', function()
+            local data = self:ReadAccountAutoloads()
+            data.accounts[self:GetAccountName()] = nil
+            self:WriteAccountAutoloads(data)
+            SaveManager.AccountAutoloadLabel:SetText(self:GetAccountName() .. ' autoload: none')
+        end)
+
         section:AddButton('Autoload for all accounts', function()
             local name = Options.SaveManager_ConfigList.Value
             writefile(self.Folder .. '/settings/autoload.txt', name)
@@ -281,18 +294,6 @@ do
             SaveManager.AccountAutoloadLabel:SetText(self:GetAccountName() .. ' autoload: ' .. name)
         end)
 
-        section:AddButton('Clear all accounts autoload', function()
-            local path = self.Folder .. '/settings/autoload.txt'
-            if isfile(path) then delfile(path) end
-            SaveManager.AutoloadLabel:SetText('All accounts autoload: none')
-        end)
-
-        section:AddButton('Clear account autoload', function()
-            local data = self:ReadAccountAutoloads()
-            data.accounts[self:GetAccountName()] = nil
-            self:WriteAccountAutoloads(data)
-            SaveManager.AccountAutoloadLabel:SetText(self:GetAccountName() .. ' autoload: none')
-        end)
 
         SaveManager.AutoloadLabel =
             section:AddLabel('All accounts autoload: none', true)
