@@ -228,7 +228,7 @@ do
             local name = readfile(path)
             local ok, err = self:Load(name)
             if ok then
-                self.Library:Notify(('Loaded global config "%s"'):format(name))
+                self.Library:Notify(('Loaded All Profiles config "%s"'):format(name))
             else
                 self.Library:Notify('Failed: ' .. err)
             end
@@ -270,7 +270,7 @@ do
         section:AddButton('Clear global autoload', function()
             local path = self.Folder .. '/settings/autoload.txt'
             if isfile(path) then delfile(path) end
-            SaveManager.AutoloadLabel:SetText('Global autoload: none')
+            SaveManager.AutoloadLabel:SetText('All Profiles autoload: none')
         end)
 
         section:AddButton('Clear profile autoload', function()
@@ -283,7 +283,7 @@ do
         section:AddButton('Autoload for all profiles', function()
             local name = Options.SaveManager_ConfigList.Value
             writefile(self.Folder .. '/settings/autoload.txt', name)
-            SaveManager.AutoloadLabel:SetText('Global autoload: ' .. name)
+            SaveManager.AutoloadLabel:SetText('All Profiles autoload: ' .. name)
         end)
 
         section:AddButton('Autoload for this profile', function()
@@ -295,7 +295,7 @@ do
         end)
 
         SaveManager.AutoloadLabel =
-            section:AddLabel('Global autoload: none', true)
+            section:AddLabel('All Profiles autoload: none', true)
 
         SaveManager.ProfileAutoloadLabel =
             section:AddLabel('Profile autoload: none', true)
