@@ -1,226 +1,234 @@
 local HttpService = game:GetService('HttpService')
 
-local SpectreConfig = {}
+local SpectreStore = {}
 
 do
-    SpectreConfig.Root = 'ProjectSpectre'
-    SpectreConfig.Blacklist = {}
+    SpectreStore.RootFolder = 'ProjectSpectre'
+    SpectreStore.IgnoreKeys = {}
 
-    SpectreConfig.Serializers = {
-
+    SpectreStore.Parser = {
         Toggle = {
-            Encode = function(id, obj)
-                return { t = 'Toggle', id = id, v = obj.Value }
+            Save = function(idx, object)
+                return { type = 'Toggle', idx = idx, value = object.Value }
             end,
-            Decode = function(id, data)
-                if Toggles[id] then
-                    if data.v == false and not Toggles[id].Value then return end
-                    Toggles[id]:SetValue(data.v)
+            Load = function(idx, data)
+                if Toggles[idx] then
+                    if data.value == false and not Toggles[idx].Value then return end
+                    Toggles[idx]:SetValue(data.value)
                 end
-            end
+            end,
         },
 
         Slider = {
-            Encode = function(id, obj)
-                return { t = 'Slider', id = id, v = tostring(obj.Value) }
+            Save = function(idx, object)
+                return { type = 'Slider', idx = idx, value = tostring(object.Value) }
             end,
-            Decode = function(id, data)
-                if Options[id] then
-                    Options[id]:SetValue(data.v)
+            Load = function(idx, data)
+                if Options[idx] then
+                    Options[idx]:SetValue(data.value)
                 end
-            end
+            end,
         },
 
         Dropdown = {
-            Encode = function(id, obj)
-                return { t = 'Dropdown', id = id, v = obj.Value, m = obj.Multi }
+            Save = function(idx, object)
+                return { type = 'Dropdown', idx = idx, value = object.Value, multi = object.Multi }
             end,
-            Decode = function(id, data)
-                if Options[id] then
-                    Options[id]:SetValue(data.v)
+            Load = function(idx, data)
+                if Options[idx] then
+                    Options[idx]:SetValue(data.value)
                 end
-            end
+            end,
         },
 
         ColorPicker = {
-            Encode = function(id, obj)
+            Save = function(idx, object)
                 return {
-                    t = 'ColorPicker',
-                    id = id,
-                    v = obj.Value:ToHex(),
-                    a = obj.Transparency
+                    type = 'ColorPicker',
+                    idx = idx,
+                    value = object.Value:ToHex(),
+                    transparency = object.Transparency
                 }
             end,
-            Decode = function(id, data)
-                if Options[id] then
-                    Options[id]:SetValueRGB(Color3.fromHex(data.v), data.a)
+            Load = function(idx, data)
+                if Options[idx] then
+                    Options[idx]:SetValueRGB(Color3.fromHex(data.value), data.transparency)
                 end
-            end
+            end,
         },
 
         KeyPicker = {
-            Encode = function(id, obj)
-                return { t = 'KeyPicker', id = id, k = obj.Value, m = obj.Mode }
+            Save = function(idx, object)
+                return { type = 'KeyPicker', idx = idx, mode = object.Mode, key = object.Value }
             end,
-            Decode = function(id, data)
-                if Options[id] then
-                    Options[id]:SetValue({ data.k, data.m })
+            Load = function(idx, data)
+                if Options[idx] then
+                    Options[idx]:SetValue({ data.key, data.mode })
                 end
-            end
+            end,
         },
 
         Input = {
-            Encode = function(id, obj)
-                return { t = 'Input', id = id, v = obj.Value }
+            Save = function(idx, object)
+                return { type = 'Input', idx = idx, text = object.Value }
             end,
-            Decode = function(id, data)
-                if Options[id] and type(data.v) == 'string' then
-                    Options[id]:SetValue(data.v)
+            Load = function(idx, data)
+                if Options[idx] and type(data.text) == 'string' then
+                    Options[idx]:SetValue(data.text)
                 end
-            end
-        }
+            end,
+        },
     }
 
-    function SpectreConfig:BlacklistKeys(list)
-        for _, k in next, list do
-            self.Blacklist[k] = true
+
+    function SpectreStore:Blacklist(list)
+        for _, key in next, list do
+            self.IgnoreKeys[key] = true
         end
     end
 
-    function SpectreConfig:InitStorage()
-        for _, p in ipairs({
-            self.Root,
-            self.Root .. '/themes',
-            self.Root .. '/settings'
+    function SpectreStore:SetRoot(folder)
+        self.RootFolder = folder
+        self:InitFolders()
+    end
+
+    function SpectreStore:InitFolders()
+        for _, path in ipairs({
+            self.RootFolder,
+            self.RootFolder .. '/themes',
+            self.RootFolder .. '/settings'
         }) do
-            if not isfolder(p) then
-                makefolder(p)
+            if not isfolder(path) then
+                makefolder(path)
             end
         end
     end
 
-    function SpectreConfig:WriteConfig(name)
-        if not name then return false, 'no name' end
 
-        local payload = { entries = {} }
-        local path = self.Root .. '/settings/' .. name .. '.json'
+    function SpectreStore:Write(name)
+        if not name then return false, 'no config selected' end
 
-        for id, t in next, Toggles do
-            if not self.Blacklist[id] then
-                table.insert(payload.entries, self.Serializers[t.Type].Encode(id, t))
+        local data = { objects = {} }
+        local path = self.RootFolder .. '/settings/' .. name .. '.json'
+
+        for idx, toggle in next, Toggles do
+            if not self.IgnoreKeys[idx] then
+                table.insert(data.objects, self.Parser[toggle.Type].Save(idx, toggle))
             end
         end
 
-        for id, o in next, Options do
-            local ser = self.Serializers[o.Type]
-            if ser and not self.Blacklist[id] then
-                table.insert(payload.entries, ser.Encode(id, o))
+        for idx, option in next, Options do
+            if self.Parser[option.Type] and not self.IgnoreKeys[idx] then
+                table.insert(data.objects, self.Parser[option.Type].Save(idx, option))
             end
         end
 
-        writefile(path, HttpService:JSONEncode(payload))
+        writefile(path, HttpService:JSONEncode(data))
         return true
     end
 
-    function SpectreConfig:ApplyConfig(name)
+    function SpectreStore:Apply(name)
         if not name then return false end
 
-        local path = self.Root .. '/settings/' .. name .. '.json'
+        local path = self.RootFolder .. '/settings/' .. name .. '.json'
         if not isfile(path) then return false end
 
-        local data = HttpService:JSONDecode(readfile(path))
-        for _, entry in ipairs(data.entries or {}) do
-            local handler = self.Serializers[entry.t]
-            if handler then
-                handler.Decode(entry.id, entry)
+        local decoded = HttpService:JSONDecode(readfile(path))
+        for _, obj in next, decoded.objects do
+            if self.Parser[obj.type] then
+                self.Parser[obj.type].Load(obj.idx, obj)
             end
         end
 
         return true
     end
 
-    function SpectreConfig:GetPlayerKey()
-        return game:GetService("Players").LocalPlayer.Name
+
+    function SpectreStore:GetAccount()
+        local plr = game:GetService("Players").LocalPlayer
+        return plr and plr.Name or "Unknown"
     end
 
-    function SpectreConfig:GetAccountMapPath()
-        return self.Root .. '/settings/accounts.json'
+    function SpectreStore:GetAccountFile()
+        return self.RootFolder .. "/settings/load_acc.json"
     end
 
-    function SpectreConfig:ReadAccountMap()
-        if not isfile(self:GetAccountMapPath()) then
-            return {}
+    function SpectreStore:ReadAccounts()
+        local path = self:GetAccountFile()
+        if not isfile(path) then return { accounts = {} } end
+        return HttpService:JSONDecode(readfile(path))
+    end
+
+    function SpectreStore:WriteAccounts(data)
+        writefile(self:GetAccountFile(), HttpService:JSONEncode(data))
+    end
+
+    function SpectreStore:AutoApply()
+        local acc = self:GetAccount()
+        local data = self:ReadAccounts()
+
+        if data.accounts and data.accounts[acc] then
+            return self:Apply(data.accounts[acc])
         end
-        return HttpService:JSONDecode(readfile(self:GetAccountMapPath()))
-    end
 
-    function SpectreConfig:WriteAccountMap(map)
-        writefile(self:GetAccountMapPath(), HttpService:JSONEncode(map))
-    end
-
-    function SpectreConfig:ApplyAutoConfig()
-        local acc = self:GetPlayerKey()
-        local map = self:ReadAccountMap()
-
-        if map[acc] then
-            return self:ApplyConfig(map[acc])
-        end
-
-        local global = self.Root .. '/settings/autoload.txt'
+        local global = self.RootFolder .. '/settings/autoload.txt'
         if isfile(global) then
-            self:ApplyConfig(readfile(global))
+            self:Apply(readfile(global))
         end
     end
-
-    function SpectreConfig:ScanConfigs()
+    function SpectreStore:Scan()
         local out = {}
-        for _, f in ipairs(listfiles(self.Root .. '/settings')) do
-            local name = f:match("([^/\\]+)%.json$")
+        for _, file in ipairs(listfiles(self.RootFolder .. '/settings')) do
+            local name = file:match("([^/\\]+)%.json$")
             if name then table.insert(out, name) end
         end
         return out
     end
 
-    function SpectreConfig:CreateConfigUI(tab)
-        local box = tab:AddRightGroupbox('Configuration')
+    function SpectreStore:BuildUI(tab)
+        local section = tab:AddRightGroupbox('Configuration')
 
-        box:AddDropdown('Spectre_ConfigList', {
-            Values = self:ScanConfigs(),
+        section:AddDropdown('Spectre_ConfigList', {
+            Text = 'Config list',
+            Values = self:Scan(),
             AllowNull = true
         })
 
-        box:AddInput('Spectre_ConfigName', { Text = 'Config name' })
-        box:AddDivider()
+        section:AddInput('Spectre_ConfigName', { Text = 'Config name' })
+        section:AddDivider()
 
-        box:AddButton('Create', function()
-            self:WriteConfig(Options.Spectre_ConfigName.Value)
+        section:AddButton('Create config', function()
+            local name = Options.Spectre_ConfigName.Value
+            if name:gsub(' ', '') == '' then return end
+            self:Write(name)
         end)
 
-        box:AddButton('Load', function()
-            self:ApplyConfig(Options.Spectre_ConfigList.Value)
+        section:AddButton('Load config', function()
+            self:Apply(Options.Spectre_ConfigList.Value)
         end)
 
-        box:AddButton('Overwrite', function()
-            self:WriteConfig(Options.Spectre_ConfigList.Value)
+        section:AddButton('Overwrite config', function()
+            self:Write(Options.Spectre_ConfigList.Value)
         end)
 
-        box:AddButton('Autoload (All Accounts)', function()
-            writefile(self.Root .. '/settings/autoload.txt', Options.Spectre_ConfigList.Value)
+        section:AddButton('Autoload for all accounts', function()
+            writefile(self.RootFolder .. '/settings/autoload.txt', Options.Spectre_ConfigList.Value)
         end)
 
-        box:AddButton('Autoload (This Account)', function()
-            local map = self:ReadAccountMap()
-            map[self:GetPlayerKey()] = Options.Spectre_ConfigList.Value
-            self:WriteAccountMap(map)
+        section:AddButton('Autoload for this account', function()
+            local data = self:ReadAccounts()
+            data.accounts = data.accounts or {}
+            data.accounts[self:GetAccount()] = Options.Spectre_ConfigList.Value
+            self:WriteAccounts(data)
         end)
 
-        self:BlacklistKeys({
+        self:Blacklist({
             'Spectre_ConfigList',
             'Spectre_ConfigName'
         })
     end
 
-    SpectreConfig:InitStorage()
+    SpectreStore:InitFolders()
 end
 
-return SpectreConfig
+return SpectreStore
